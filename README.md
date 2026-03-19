@@ -19,7 +19,7 @@ For work that can be described in a single prompt.
 ## Detailed Feature Specs - Planning Mode (Markdown in Git)
 
 For features that benefit from a written specification and human review before
-implementation begins. Specs move through three folders that represent their
+implementation begins. Specs move through two folders that represent their
 lifecycle:
 
 | Folder | Purpose |
