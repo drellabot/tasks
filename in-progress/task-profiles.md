@@ -103,20 +103,34 @@ When no profile is specified, the orchestrator runs the current default setup: i
 
 ### 4. mcp.yaml — Additional MCP Servers
 
-A profile can register additional MCP servers that Claude should have access to. These are registered via `claude mcp add` inside the sandbox during setup.
+A profile can register additional MCP servers that Claude should have access to. These servers run **inside the sandbox**, fully decoupled from the orchestrator host. The orchestrator copies the `mcp.yaml` into the sandbox and registers each entry via `claude mcp add`.
+
+MCP servers support two transport modes:
+
+**stdio** (recommended for most cases): The MCP server runs as a subprocess of Claude. No networking required. The profile's `setup.sh` installs the server binary/package in the sandbox, and `mcp.yaml` declares how to launch it.
 
 ```yaml
 # code-review/mcp.yaml
 servers:
-  - name: review-tools
+  - name: patternfly-docs
+    transport: stdio
+    command: npx
+    args: ["-y", "@patternfly/patternfly-mcp@latest"]
+```
+
+**http**: The MCP server runs as a separate process inside the sandbox, listening on a port. Useful for servers that need to be shared or long-lived.
+
+```yaml
+servers:
+  - name: custom-tools
     transport: http
-    url: http://localhost:19091/mcp
+    url: http://localhost:8080/mcp
     scope: user
 ```
 
-The orchestrator iterates over the `servers` list and runs `claude mcp add` for each entry. The MCP servers themselves must be running on the host (and tunneled into the sandbox via gjoll, similar to the existing orchestrator MCP server on port 19090).
+The orchestrator iterates over the `servers` list and runs `claude mcp add` in the sandbox for each entry, translating the YAML fields to the appropriate CLI flags.
 
-The built-in orchestrator MCP server (`open_pr`, `update_pr`) is always registered regardless of profile. Profiles add servers; they do not remove or filter built-in tools.
+This design keeps profile MCP servers fully self-contained — profiles bring their own tools without requiring orchestrator changes, host-side processes, or tunnel configuration. The only MCP server that runs on the host is the orchestrator's built-in server (`open_pr`, `update_pr`), which needs host credentials for GitHub operations. That server is always registered regardless of profile.
 
 ### 5. settings.json — Claude Code Settings
 
@@ -144,9 +158,9 @@ The current `setupSandbox()` in `internal/cmd/task.go` is restructured:
 **When a profile is specified (`--profile <name>`):**
 3. Write base prompt + profile CLAUDE.md → `~/.claude/CLAUDE.md`
 4. Copy `settings.json` → `~/.claude/settings.json` (if present)
-5. Process `mcp.yaml` — run `claude mcp add` for each server entry (if present)
+5. Copy `mcp.yaml` to sandbox and process it — run `claude mcp add` inside the sandbox for each server entry (if present)
 6. Write `sandbox-cp` and `sandbox-ssh` helper scripts to a temp directory on host
-7. Run `setup.sh` on the host with helpers on PATH and environment variables set (if present)
+7. Run `setup.sh` on the host with helpers on PATH and environment variables set (if present; setup.sh may install MCP server dependencies needed by mcp.yaml entries)
 
 **When no profile is specified (backward compatibility):**
 3. `mkdir -p ~/project && cd ~/project && git init`
@@ -269,6 +283,5 @@ Changes to existing files:
 
 ## Open Questions
 
-- **Tunnel management for profile MCP servers**: The orchestrator currently sets up gjoll tunnels for port 19090 (orchestrator MCP) and 18080 (Vertex proxy) in `sandbox.tf`. Profile MCP servers on other ports would need additional tunnels. Should the orchestrator dynamically configure tunnels based on `mcp.yaml`, or should profile authors manage tunnel configuration separately? _Recommendation: start with a fixed set of tunnel ports (e.g., 19091-19095 reserved for profile MCP servers) and revisit dynamic tunnels if the fixed range becomes limiting._
 - **Profile versioning**: Should tasks pin a specific profile version (commit SHA), or always use the latest? _Recommendation: always use latest for now. Add version pinning if reproducibility becomes a requirement._
 - **`default` profile vs. no-profile**: Should running without `--profile` be identical to `--profile default`, or should they remain separate code paths? _Recommendation: keep them separate initially. The no-profile path is the backward-compatible path with the embedded prompt. Once profiles are proven, the no-profile path can be deprecated in favor of `--profile default`._
