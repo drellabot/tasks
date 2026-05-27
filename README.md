@@ -28,10 +28,14 @@ sequenceDiagram
 
 1. A human creates a **GitHub Issue** in this repository with a prompt-style
    description.
-2. drellabot picks it up and opens a **pull request** that places the issue
+2. **Attachments:** drag-and-drop files into the issue body (or paste links to
+   `github.com/user-attachments/...` URLs). When drellabot picks up the issue,
+   those files are downloaded into the sandbox at `~/attachments/` for the agent
+   to read.
+3. drellabot picks it up and opens a **pull request** that places the issue
    content as a specification file in `done/`.
-3. The open PR kicks off the agentic workflow to deliver on the prompt.
-4. As soon as the implementation is complete, drellabot comments on the PR and a
+4. The open PR kicks off the agentic workflow to deliver on the prompt.
+5. As soon as the implementation is complete, drellabot comments on the PR and a
    human merges the PR.
 
 ## Detailed Feature Specs - Planning Mode (Markdown in Git)
